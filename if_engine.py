@@ -43,22 +43,35 @@ CAPACITY_MAX = 100
 
 # Valid enum values — engine validates against these
 VALID_VALUES = {
-    "environment":         ["consumer", "enterprise", "government"],
-    "team_structure":      ["stream_aligned", "platform", "siloed"],
-    "build_buy_configure": ["build", "buy", "configure"],
-    "primary_risk":        ["delivery_speed", "technical_debt", "integration",
-                            "vendor_lock", "team_capability"],
-    "data_architecture":   ["shared_db", "dedicated_dbs"],
-    "coupling":            ["medium"],
-    "testing_coverage":    ["minimal", "standard", "thorough"],
-    "deployment_method":   ["big_bang", "rolling", "blue_green", "canary"],
-    "rollback_plan":       ["none", "partial", "full"],
-    "observability_level": ["none", "basic", "full"],
-    "change_owner":        ["single_person", "shared_pair", "team_owned"],
-    "vendor_dependency":   ["low", "medium", "high"],
-    "fallback_strategy":   ["none", "manual", "automated"],
-    "on_call_coverage":    ["none", "business_hours", "follow_the_sun", "full_24x7"],
-    "incident_response":   ["ad_hoc", "runbook", "practiced"],
+    "environment":          ["consumer", "enterprise", "government"],
+    "team_structure":       ["stream_aligned", "platform", "siloed"],
+    "build_buy_configure":  ["build", "buy", "configure"],
+    "primary_risk":         ["delivery_speed", "technical_debt", "integration",
+                             "vendor_lock", "team_capability"],
+    "data_architecture":    ["shared_db", "dedicated_dbs"],
+    "architecture_pattern": ["monolith", "layered", "client_server",
+                             "event_driven", "microservices"],
+    "coupling":             ["medium"],
+    "testing_coverage":     ["minimal", "standard", "thorough"],
+    "deployment_method":    ["big_bang", "rolling", "blue_green", "canary"],
+    "rollback_plan":        ["none", "partial", "full"],
+    "observability_level":  ["none", "basic", "full"],
+    "change_owner":         ["single_person", "shared_pair", "team_owned"],
+    "vendor_dependency":    ["low", "medium", "high"],
+    "fallback_strategy":    ["none", "manual", "automated"],
+    "on_call_coverage":     ["none", "business_hours", "follow_the_sun", "full_24x7"],
+    "incident_response":    ["ad_hoc", "runbook", "practiced"],
+}
+
+# Architecture tax — upfront cost + velocity modifier applied from Frame 1
+# (upfront_cost_consumer, upfront_cost_enterprise, upfront_cost_gov, velocity_multiplier)
+# velocity_multiplier < 1.0 means phases cost more (slower delivery)
+ARCHITECTURE_TAX = {
+    "monolith":      (30_000,  22_000,  18_000, 1.00),  # cheap, no velocity hit — pays later
+    "layered":       (50_000,  37_000,  30_000, 0.95),  # small structure cost
+    "client_server": (60_000,  45_000,  36_000, 0.92),  # server setup overhead
+    "event_driven":  (110_000, 82_000,  66_000, 0.85),  # messaging infra + complexity
+    "microservices": (150_000, 112_000, 90_000, 0.80),  # highest coordination overhead
 }
 
 # Severity multipliers applied to baseline income loss
@@ -85,6 +98,7 @@ def new_game_state(team_name):
             "phase2": 0,
             "phase3": 0,
             "phase4": 0,
+            "phase5": 0,
         },
         "trust_score":     100,
         "seeds":           [],     # planted consequence IDs
@@ -120,6 +134,58 @@ def _check_field(profile, field, required=True):
     return errors, warnings
 
 
+def calculate_architecture_tax(frame1):
+    """
+    Calculate upfront architecture tax and velocity modifier.
+    Returns (upfront_cost, velocity_multiplier, description).
+    """
+    pattern = frame1.get("architecture_pattern", "monolith")
+    env     = frame1.get("environment", "consumer")
+    idx     = ENV_IDX.get(env, 0)
+    tax     = ARCHITECTURE_TAX.get(pattern, ARCHITECTURE_TAX["monolith"])
+    cost    = tax[idx]
+    vel     = tax[3]
+    descriptions = {
+        "monolith":      "Single deployable unit. Low setup cost. Coupling debt deferred.",
+        "layered":       "Structured layers. Small coordination overhead from day one.",
+        "client_server": "Central server setup. Bottleneck risk baked in.",
+        "event_driven":  "Async messaging infrastructure required before first feature.",
+        "microservices": "Service boundaries, API contracts, and orchestration required upfront.",
+    }
+    return cost, vel, descriptions.get(pattern, "")
+
+
+def apply_architecture_tax(game_state):
+    """Apply architecture tax to game state and print the assessment."""
+    f1   = game_state.get("frame1", {})
+    cost, vel, desc = calculate_architecture_tax(f1)
+    pattern = f1.get("architecture_pattern", "monolith")
+    vel_pct = int((1.0 - vel) * 100)
+
+    # Store velocity modifier for phase income calculations
+    game_state["velocity_multiplier"] = vel
+    game_state["architecture_tax_paid"] = cost
+
+    # Deduct from phase 1 income
+    game_state["income"]["phase1"] -= cost
+
+    sep = "━" * 50
+    print(f"\n{sep}")
+    print(f"ARCHITECTURE TAX — assessed at Frame 1")
+    print(sep)
+    print(f"Pattern:   {pattern}")
+    print(f"Tax:       -${cost:,} upfront setup cost")
+    if vel_pct > 0:
+        print(f"           -{vel_pct}% delivery velocity (all phases)")
+    else:
+        print(f"           No velocity penalty")
+    print(f"\n{desc}")
+    if vel_pct > 0:
+        print(f"\nThis means every phase baseline is reduced by {vel_pct}%.")
+        print(f"You chose {pattern}. That choice has a price from day one.")
+    print(sep)
+
+
 def validate_frame1(profile):
     """
     Validate Frame 1 architecture config.
@@ -128,31 +194,36 @@ def validate_frame1(profile):
     errors = []
     warnings = []
     required = ["environment", "team_structure", "build_buy_configure",
-                "primary_risk", "data_architecture", "coupling"]
+                "primary_risk", "data_architecture", "architecture_pattern", "coupling"]
 
     for field in required:
         e, w = _check_field(profile, field)
         errors.extend(e)
         warnings.extend(w)
 
-    # Coupling must be medium
     if profile.get("coupling") != "medium":
         errors.append("'coupling' must be 'medium' — this field is fixed.")
 
-    # Foreshadowing warnings (not errors — students choose to ignore or not)
+    # Foreshadowing warnings
     if profile.get("data_architecture") == "shared_db":
         warnings.append(
-            "⚠  shared_db selected — lower cost, faster to build. "
-            "Note for later: all services share one database."
+            "⚠  shared_db — lower cost, faster to build. "
+            "All services share one database."
         )
     if profile.get("team_structure") == "siloed":
-        warnings.append(
-            "⚠  siloed team structure — functional departments with handoff boundaries."
-        )
+        warnings.append("⚠  siloed team structure — high handoff cost.")
     if profile.get("build_buy_configure") == "configure":
-        warnings.append(
-            "⚠  configure strategy — your delivery depends on vendor roadmap decisions."
-        )
+        warnings.append("⚠  configure — delivery depends on vendor roadmap decisions.")
+
+    # Architecture-specific warnings
+    pattern = profile.get("architecture_pattern", "")
+    arch_warnings = {
+        "monolith":      "⚠  monolith — coupling debt will surface under change pressure.",
+        "event_driven":  "⚠  event_driven — async debugging requires strong observability.",
+        "microservices": "⚠  microservices — high coordination cost from sprint one.",
+    }
+    if pattern in arch_warnings:
+        warnings.append(arch_warnings[pattern])
 
     is_valid = len(errors) == 0
     return is_valid, errors, warnings
