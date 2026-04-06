@@ -55,35 +55,7 @@ def _should_fire_PT5(frame1, frame2, game_state):
             frame2.get("observability_level") in ["none", "basic"])
 
 
-def select_architecture_cards(frame1, game_state):
-    """Return Phase 0 card — one per team based on architecture pattern."""
-    cards = []
-    if _should_fire_A1(frame1, game_state): cards.append("A1")
-    if _should_fire_A2(frame1, game_state): cards.append("A2")
-    if _should_fire_A3(frame1, game_state): cards.append("A3")
-    if _should_fire_A4(frame1, game_state): cards.append("A4")
-    if _should_fire_A5(frame1, game_state): cards.append("A5")
-    return cards[:1]  # exactly one per team
-
-
-def select_pipeline_cards(frame1, frame2, game_state):
-    """Return Phase 2a pipeline run cards. Max 2."""
-    cards = []
-    if _should_fire_PT1(frame1, frame2, game_state): cards.append("PT1")
-    if _should_fire_PT2(frame1, frame2, game_state): cards.append("PT2")
-    if _should_fire_PT4(frame1, frame2, game_state): cards.append("PT4")
-    return cards[:2]
-
-
-def select_staging_cards(frame1, frame2, game_state):
-    """Return Phase 2b staging/UAT cards. Max 2."""
-    cards = []
-    if _should_fire_PT3(frame1, frame2, game_state): cards.append("PT3")
-    if _should_fire_PT5(frame1, frame2, game_state): cards.append("PT5")
-    return cards[:2]
-
-
-
+def _should_fire_B1(frame1, game_state):
     return frame1.get("team_structure") == "siloed"
 
 def _should_fire_B2(frame1, game_state):
@@ -435,8 +407,13 @@ def card_L3_negative():
             "c": "Public acknowledgment and fix — trust play, operationally painful",
         },
         "flavor": "Equifax's breach went undetected for 78 days. Not because nobody was watching — because nobody had instrumented the right thing.",
+        "income_loss": {
+            "a": (180_000, 135_000, 108_000),
+            "b": (90_000,  67_000,  54_000),
+            "c": (60_000,  45_000,  36_000),
+        },
         "income_loss_base": {
-            # 4 days already lost regardless of decision
+            # 4 days already lost regardless of decision — added on top in _run_phase
             "locked": (75_000, 56_000, 45_000),
             "a": (180_000, 135_000, 108_000),
             "b": (90_000, 67_000, 54_000),
@@ -1458,6 +1435,37 @@ def get_card(card_id, game_state=None):
 # CARD SELECTION — which cards fire per phase
 # ============================================================
 
+def select_architecture_cards(frame1, game_state):
+    """Return Phase 0 card — one per team based on architecture pattern."""
+    cards = []
+    if _should_fire_A1(frame1, game_state): cards.append("A1")
+    if _should_fire_A2(frame1, game_state): cards.append("A2")
+    if _should_fire_A3(frame1, game_state): cards.append("A3")
+    if _should_fire_A4(frame1, game_state): cards.append("A4")
+    if _should_fire_A5(frame1, game_state): cards.append("A5")
+    return cards[:1]  # exactly one per team
+
+
+def select_pipeline_cards(frame1, frame2, game_state):
+    """Return Phase 2a pipeline run cards. Max 2."""
+    cards = []
+    if _should_fire_PT1(frame1, frame2, game_state): cards.append("PT1")
+    if _should_fire_PT2(frame1, frame2, game_state): cards.append("PT2")
+    if _should_fire_PT4(frame1, frame2, game_state): cards.append("PT4")
+    return cards[:2]
+
+
+def select_staging_cards(frame1, frame2, game_state):
+    """Return Phase 2b staging/UAT cards. Max 2."""
+    cards = []
+    if _should_fire_PT3(frame1, frame2, game_state): cards.append("PT3")
+    if _should_fire_PT5(frame1, frame2, game_state): cards.append("PT5")
+    return cards[:2]
+
+
+
+    return frame1.get("team_structure") == "siloed"
+
 def select_build_cards(frame1, game_state):
     """Return list of card IDs to fire in Phase 1 (Build). Max 3."""
     cards = []
@@ -1512,4 +1520,3 @@ def select_scale_cards(game_state):
     if _should_fire_S3(game_state.get("frame1", {}), game_state):
         cards.append("S3")
     return cards
-
