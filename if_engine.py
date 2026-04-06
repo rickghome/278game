@@ -179,7 +179,7 @@ def apply_architecture_tax(game_state):
     game_state["architecture_tax_paid"] = cost
 
     # Deduct from phase 1 income
-    game_state["income"]["phase1"] -= cost
+    game_state["income"]["arch_stress"] -= cost
 
     sep = "=" * 50
     print(f"\n{sep}")
