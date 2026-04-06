@@ -10,7 +10,7 @@ Income triplets throughout are ordered:
   Consumer / Enterprise / Government
 """
 
-import random
+import random 
 
 # ============================================================
 # CONSTANTS

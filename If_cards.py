@@ -12,7 +12,7 @@ Income triplets throughout: Consumer / Enterprise / Government
 # Card IDs in pilot deck:
 # Build:  B1, B3, B5, B6, B7
 # Live:   L1, L3, L4, L6
-# v2:     P1, P3, D1, V2
+# v2:     P1, P3, D1, V2 
 # Scale:  S1, S2
 
 
