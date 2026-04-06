@@ -567,29 +567,13 @@ def print_final_summary(game_state):
     if cards:
         print("Cards that fired:")
         for c in cards:
-            d = game_state["decisions"].get(c, "?")
-            print(f"  {c} -- option ({d})")
+            d = game_state["decisions"].get(c)
+            if d:
+                print(f"  {c} -- option ({d})")
+            else:
+                print(f"  {c} -- (auto)")
     print(sep)
     print("\nCopy the above and give it to your instructor.")
-    print(sep)
-    print("Key config choices:")
-    f1 = game_state.get("frame1", {})
-    f2 = game_state.get("frame2", {})
-    f3 = game_state.get("frame3", {})
-    for label, profile in [("Architecture", f1), ("Pipeline", f2), ("Operations", f3)]:
-        if profile:
-            for k, v in profile.items():
-                if k != "coupling":
-                    print(f"  {k}: {v}")
-    print()
-    cards = game_state.get("cards_fired", [])
-    if cards:
-        print("Cards that fired:")
-        for c in cards:
-            d = game_state["decisions"].get(c, "?")
-            print(f"  {c} — option ({d})")
-    print(sep)
-    print("\n📋 Copy the above output and give it to your instructor.")
     print(sep)
 
 
