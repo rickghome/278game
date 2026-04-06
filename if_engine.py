@@ -94,11 +94,19 @@ def new_game_state(team_name):
         "environment":     None,
         "phase":           0,
         "income": {
-            "phase1": 0,
-            "phase2": 0,
-            "phase3": 0,
-            "phase4": 0,
-            "phase5": 0,
+            # Phase names match the game arc labels exactly.
+            # arch_stress  = Phase 0 (architecture pattern stress test)
+            # build        = Phase 1 (org and planning cards)
+            # pipeline     = Pipeline Phase (gate decisions)
+            # live         = Phase 3 (production incidents)
+            # v2_release   = Phase 4 (v2 compounding)
+            # scale        = Phase 5 (scale event)
+            "arch_stress": 0,
+            "build":       0,
+            "pipeline":    0,
+            "live":        0,
+            "v2_release":  0,
+            "scale":       0,
         },
         "trust_score":     100,
         "seeds":           [],     # planted consequence IDs
@@ -109,6 +117,10 @@ def new_game_state(team_name):
         "frame1":          None,
         "frame2":          None,
         "frame3":          None,
+        "pipeline_gates":  None,
+        "postmortem":      None,
+        "strategy_change": None,
+        "iteration":       1,
     }
 
 
@@ -479,23 +491,36 @@ def print_consequence(card_name, decision, income_loss, trust_delta,
     print(SEP)
 
 
+PHASE_LABELS = {
+    "arch_stress": "Architecture Stress",
+    "build":       "Build",
+    "pipeline":    "Pipeline Gates",
+    "live":        "Live",
+    "v2_release":  "v2 Release",
+    "scale":       "Scale Event",
+}
+
+
 def print_income_summary(game_state):
     print(f"\n{SEP}")
-    print(f"FRESHCART INCOME SUMMARY — {game_state['team_name']}")
+    print(f"FRESHCART INCOME SUMMARY -- {game_state['team_name']}")
     print(SEP)
-    total = 0
+    total    = 0
+    baseline = _baseline(game_state.get("environment", "consumer"))
     for phase_key, amount in game_state["income"].items():
-        label = phase_key.replace("phase", "Phase ")
-        baseline = _baseline(game_state["environment"])
-        print(f"  {label}:  ${amount:,}  (baseline: ${baseline:,})")
+        if amount == 0:
+            continue
+        label = PHASE_LABELS.get(phase_key, phase_key)
+        print(f"  {label:<22}  ${amount:>10,}")
         total += amount
-    print(f"\n  Total income:    ${total:,}")
-    print(f"  Trust score:     {game_state['trust_score']}/100")
-    env = game_state["environment"]
+    print(f"  {'':-<35}")
+    print(f"  {'Total income':<22}  ${total:>10,}")
+    print(f"  {'Trust score':<22}  {game_state['trust_score']}/100")
+    env = game_state.get("environment", "consumer")
     trust_label = {
-        "consumer": "Customer Trust",
+        "consumer":   "Customer Trust",
         "enterprise": "Stakeholder Confidence",
-        "government": "Political Capital"
+        "government": "Political Capital",
     }.get(env, "Trust")
     print(f"  ({trust_label})")
     print(SEP)
@@ -504,18 +529,49 @@ def print_income_summary(game_state):
 def print_final_summary(game_state):
     sep = "=" * 55
     print(f"\n{sep}")
-    print(f"FRESHCART FINAL REPORT — {game_state['team_name']}")
+    print(f"FRESHCART FINAL REPORT -- {game_state['team_name']}")
     print(sep)
     total = sum(game_state["income"].values())
-    print(f"Environment:     {game_state['environment'].title()}")
-    print(f"Final income:    ${total:,}")
-    print(f"Final trust:     {game_state['trust_score']}/100")
+    print(f"Environment:      {game_state.get('environment','?').title()}")
+    print(f"Iteration:        {game_state.get('iteration', 1)}")
+    print(f"Final income:     ${total:,}")
+    print(f"Final trust:      {game_state['trust_score']}/100")
+    env = game_state.get("environment","consumer")
+    trust_label = {
+        "consumer": "Customer Trust",
+        "enterprise": "Stakeholder Confidence",
+        "government": "Political Capital",
+    }.get(env, "Trust")
+    print(f"                  ({trust_label})")
     print()
     print("Income by phase:")
     for pk, amt in game_state["income"].items():
-        label = pk.replace("phase", "Phase ")
-        print(f"  {label}:  ${amt:,}")
+        if amt == 0:
+            continue
+        label = PHASE_LABELS.get(pk, pk)
+        print(f"  {label:<22}  ${amt:>10,}")
     print()
+    print("Key config choices:")
+    f1 = game_state.get("frame1", {})
+    f2 = game_state.get("frame2", {})
+    f3 = game_state.get("frame3", {})
+    pg = game_state.get("pipeline_gates", {})
+    for profile, label in [(f1,"Architecture"),(f2,"Pipeline"),(f3,"Operations"),(pg,"Gates")]:
+        if not profile:
+            continue
+        for k, v in profile.items():
+            if k not in ("coupling",):
+                print(f"  {k}: {v}")
+    print()
+    cards = game_state.get("cards_fired", [])
+    if cards:
+        print("Cards that fired:")
+        for c in cards:
+            d = game_state["decisions"].get(c, "?")
+            print(f"  {c} -- option ({d})")
+    print(sep)
+    print("\nCopy the above and give it to your instructor.")
+    print(sep)
     print("Key config choices:")
     f1 = game_state.get("frame1", {})
     f2 = game_state.get("frame2", {})
