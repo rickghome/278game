@@ -12,7 +12,7 @@ Income triplets throughout: Consumer / Enterprise / Government
 # Card IDs in pilot deck:
 # Build:  B1, B3, B5, B6, B7
 # Live:   L1, L3, L4, L6
-# v2:     P1, P3, D1, V2 
+# v2:     P1, P3, D1, V2
 # Scale:  S1, S2
 
 
@@ -316,18 +316,27 @@ def card_L1_negative():
     }
 
 
-def card_L1_positive():
+def card_L1_positive(deployment_method="canary"):
     """Positive branch for L1 — fires when canary or blue_green chosen."""
-    return {
-        "id":      "L1_positive",
-        "name":    "The Ghost Deploy",
-        "phase":   "live",
-        "message": (
+    if deployment_method == "blue_green":
+        message = (
+            "Your blue/green deployment caught the checkout issue before cutover.\n"
+            "Traffic stayed on the green environment. Rolled back in 4 minutes.\n"
+            "Income protected. Trust unchanged.\n\n"
+            "This is what you paid for when you chose blue/green deployment."
+        )
+    else:
+        message = (
             "Your canary deployment caught the checkout issue before it reached\n"
             "full traffic. 3% of users affected. Rolled back in 4 minutes.\n"
             "Income protected. Trust unchanged.\n\n"
             "This is what you paid for when you chose canary deployment."
-        ),
+        )
+    return {
+        "id":      "L1_positive",
+        "name":    "The Ghost Deploy",
+        "phase":   "live",
+        "message": message,
         "income_loss": (18_000, 13_000, 11_000),
         "trust_delta": 0,
     }
@@ -696,7 +705,7 @@ CARD_REGISTRY = {
     "B6": card_B6,
     "B7": card_B7,
     "L1": card_L1_negative,
-    "L1_positive": card_L1_positive,
+    "L1_positive": lambda: card_L1_positive("canary"),  # default — overridden in select
     "L3": card_L3_negative,
     "L3_positive": card_L3_positive,
     "L4": card_L4,
@@ -710,10 +719,12 @@ CARD_REGISTRY = {
 }
 
 
-def get_card(card_id):
+def get_card(card_id, game_state=None):
     fn = CARD_REGISTRY.get(card_id)
     if fn is None:
         return None
+    if card_id == "L1_positive" and game_state:
+        return card_L1_positive(game_state.get("_l1_deploy", "canary"))
     return fn()
 
 
@@ -741,8 +752,11 @@ def select_build_cards(frame1, game_state):
 def select_live_cards(frame1, frame2, game_state):
     """Return list of card IDs to fire in Phase 2 (Live)."""
     cards = []
+    deploy = frame2.get("deployment_method", "big_bang")
     l1_result = _should_fire_L1(frame1, frame2, game_state)
     if l1_result == "positive":
+        # Store deployment method so card message is accurate
+        game_state["_l1_deploy"] = deploy
         cards.append("L1_positive")
     elif l1_result:
         cards.append("L1")
