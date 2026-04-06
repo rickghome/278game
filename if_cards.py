@@ -1520,3 +1520,4 @@ def select_scale_cards(game_state):
     if _should_fire_S3(game_state.get("frame1", {}), game_state):
         cards.append("S3")
     return cards
+
