@@ -1,5 +1,5 @@
 """
-ImplementForge — Card Library (Pilot Deck)
+ImplementForge — Card Library
 COSE 278: Implementing Systems — Day 4
 
 Hidden from students. Do not distribute.

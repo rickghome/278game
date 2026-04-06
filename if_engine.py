@@ -374,10 +374,21 @@ def update_income(game_state, phase_key, amount):
 
 
 def update_trust(game_state, delta):
-    """Apply delta to trust score, clamped to 0-100."""
-    env = game_state["environment"]
+    """
+    Apply delta to trust score, clamped to 0-100.
+
+    Government modifier:
+    - Trust damage (negative delta) reduced to 60% -- slower decay
+    - Trust recovery (positive delta) reduced to 50% -- harder to recover
+    - This creates asymmetry: government trust is hard to lose quickly
+      but also hard to rebuild once damaged.
+    """
+    env = game_state.get("environment", "consumer")
     if env == "government":
-        delta = int(delta * 0.6)
+        if delta < 0:
+            delta = int(delta * 0.6)   # slower decay
+        else:
+            delta = int(delta * 0.5)   # harder recovery
     game_state["trust_score"] = max(0, min(100, game_state["trust_score"] + delta))
 
 

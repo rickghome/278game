@@ -424,8 +424,8 @@ def run_phase_consequences(phase_key, game):
         mod = card.get("environment_modifier", {}).get(env, 1.0)
         income_loss = int(income_loss * mod)
 
-        # Severity escalation in Phase 4 for accumulated seeds
-        if phase_key == "phase4":
+        # Severity escalation in v2 Release for accumulated seeds
+        if phase_key == "v2_release":
             seed_count = count_seeds(game)
             if seed_count >= 2 and active_ids.index(cid) == 0:
                 income_loss = int(income_loss * 1.35)
@@ -459,7 +459,14 @@ def run_phase_consequences(phase_key, game):
         )
 
     # Record income for this phase
-    update_income(game, phase_key, max(0, phase_income))
+    # bill_arrives and political_exposure adjust the scale bucket, not their own
+    income_bucket = {
+        "bill_arrives":      "scale",
+        "political_exposure": "scale",
+    }.get(phase_key, phase_key)
+
+    if income_bucket in game["income"]:
+        update_income(game, income_bucket, max(0, phase_income))
     print_income_summary(game)
 
     # Mark processed and clean up
