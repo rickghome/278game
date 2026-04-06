@@ -10,7 +10,7 @@ Income triplets throughout are ordered:
   Consumer / Enterprise / Government
 """
 
-import random 
+import random
 
 # ============================================================
 # CONSTANTS
@@ -347,35 +347,7 @@ def add_trace(game_state, card_id, reason, seed_trigger=None,
     game_state["facilitator_trace"].append(entry)
 
 
-def print_facilitator_trace(game_state, phase_label):
-    """Print facilitator trace for current phase. Hidden from students."""
-    sep = "━" * 55
-    print(f"\n{sep}")
-    print(f"FACILITATOR TRACE — {game_state['team_name']} — {phase_label}")
-    print(sep)
-    phase_entries = [e for e in game_state["facilitator_trace"]
-                     if e.get("phase") == phase_label]
-    if not phase_entries:
-        entries = game_state["facilitator_trace"][-3:]
-    else:
-        entries = phase_entries
-    for e in entries:
-        print(f"Card fired:   {e['card']}")
-        print(f"Why:          {e['reason']}")
-        if e["seed_trigger"]:
-            print(f"Seed trigger: {e['seed_trigger']}")
-        if e["severity"]:
-            print(f"Severity:     {e['severity']}")
-        if e["modifier"]:
-            print(f"Modifier:     {e['modifier']}")
-        if e["next_risk"]:
-            print(f"Next risk:    {e['next_risk']}")
-        print()
-    active_seeds = game_state["seeds"]
-    if active_seeds:
-        print(f"Active seeds: {', '.join(active_seeds)}")
-    print(f"Trust score:  {game_state['trust_score']}")
-    print(sep)
+
 
 
 # ============================================================
@@ -491,4 +463,163 @@ def print_final_summary(game_state):
             print(f"  {c} — option ({d})")
     print(sep)
     print("\n📋 Copy the above output and give it to your instructor.")
+    print(sep)
+
+
+# ============================================================
+# FACILITATOR TRACE
+# Full causal explanation per team — hidden from students.
+# Print this after game ends to debrief fluently.
+# ============================================================
+
+DEBRIEF_PROMPTS = {
+    "B1": "Why did Team {team} get a handoff gap? They chose siloed team structure. Ask: 'What would a stream-aligned team have done differently here?'",
+    "B2": "Why did Team {team} get vendor promise risk? They chose configure strategy. Ask: 'When you chose configure, what were you assuming about the vendor?'",
+    "B3": "Why did Team {team} hit a capability gap? They chose build strategy or team_capability as primary risk. Ask: 'What would you have traded to avoid this?'",
+    "B4": "Why did Team {team} hit procurement freeze? Government environment. Ask: 'Was this predictable? What should have been planned for?'",
+    "B5": "Why did Team {team} face the speed tax? Speed pressure hits every team. Ask: 'What did you optimize for when you made this decision? What did that cost?'",
+    "B6": "Why did Team {team} face a CFO freeze? Hits every team. Ask: 'Which gaps did the freeze expose? Were those gaps a choice or a surprise?'",
+    "B7": "Why did Team {team} hit partner team friction? Siloed structure or configure strategy. Ask: 'Who owned this dependency? What would ownership have looked like?'",
+    "L1": "Why did Team {team} get the ghost deploy? big_bang deployment + no rollback plan. Ask: 'If you had chosen rolling or canary, what would have been different?'",
+    "L1_positive": "Why did Team {team} avoid the ghost deploy? They paid for canary or blue_green deployment. Ask: 'What did that cost in capacity? Was it worth it?'",
+    "L2": "Why did Team {team} get the assumption invoice? Delayed from B1 — they shipped the handoff gap. Ask: 'When did this become inevitable? What was the earliest decision point?'",
+    "L3": "Why did Team {team} have invisible fire? observability: none or basic. Ask: 'What would you have had to instrument to catch this before the CEO email?'",
+    "L3_positive": "Why did Team {team} catch the fulfillment issue early? They paid for full observability. Ask: 'What did that cost? What would it have cost not to have it?'",
+    "L4": "Why did Team {team} hit the bus route? single change_owner. Ask: 'What does it mean architecturally to have one person hold all the knowledge?'",
+    "L5": "Why did Team {team} face the approval chain? Government environment + ad_hoc incident response. Ask: 'What would practiced incident response have bought you here?'",
+    "L6": "Why did Team {team} face VP override? Hits every team — speed pressure is universal. Ask: 'Read back your rationale. Looking at the outcome, was that reasoning sound?'",
+    "P1": "Why did Team {team} get the silent passenger? Speed skip seed from B5/L6 + minimal testing. Ask: 'Trace this back — when was the earliest moment this became likely?'",
+    "P2": "Why did Team {team} face the ownership gap? L4 seed + siloed structure. Ask: 'Nobody owned the Tracking Service. Whose job was it to notice that?'",
+    "P3": "Why did Team {team} face the debt collector? B3 debt seed + build strategy. Ask: 'You knew the debt was accumulating. When would have been the right time to pay it?'",
+    "D1": "Why did Team {team} hit DB saturation? shared_db chosen in Frame 1. Ask: 'When you picked shared_db, what were you optimizing for? Did it work out that way?'",
+    "V1": "Why did Team {team} face API surprise? L2 patch debt seed + medium/high vendor dependency. Ask: 'This was a vendor decision and a patching decision combined. Which came first?'",
+    "V2": "Why did Team {team} face the locked room? configure strategy — vendor roadmap was never theirs to control. Ask: 'What would contractual protection have cost? What did not having it cost?'",
+    "G3": "Why did Team {team} face the audit? Government environment + procurement/deployment seeds. Ask: 'Technical risk was low. Process risk was high. What does that tell you about where implementation failures actually live?'",
+    "S1": "S1 hits everyone. Outcome tier was {tier}. Ask: 'What was the single most important config decision that produced this outcome?'",
+    "S2": "The bill arrives for everyone. Ask: 'Read back your rationale for this decision. Would you make the same call again?'",
+    "S3": "Why did Team {team} face political exposure? Government environment + G3 political escalation seed. Ask: 'Canada Phoenix became a political crisis before a technical one. Where did that happen here?'",
+}
+
+
+def print_facilitator_trace(game_state):
+    """
+    Print full causal trace for this team.
+    Hidden from students — run from instructor notebook or separate cell.
+    """
+    sep = "━" * 60
+    team = game_state["team_name"]
+    print(f"\n{sep}")
+    print(f"FACILITATOR TRACE — {team}")
+    print(f"(Do not share with students)")
+    print(sep)
+
+    # Config summary
+    f1 = game_state.get("frame1", {})
+    f2 = game_state.get("frame2", {})
+    f3 = game_state.get("frame3", {})
+    print("\nCONFIG CHOICES:")
+    for k, v in f1.items():
+        if k != "coupling": print(f"  {k}: {v}")
+    for k, v in f2.items(): print(f"  {k}: {v}")
+    for k, v in f3.items(): print(f"  {k}: {v}")
+
+    # Seeds
+    seeds = game_state.get("seeds", [])
+    print(f"\nSEEDS PLANTED: {seeds if seeds else 'none'}")
+
+    # Cards + rationales
+    print("\nCARDS FIRED + TEAM RATIONALE:")
+    for cid in game_state.get("cards_fired", []):
+        decision = game_state["decisions"].get(cid, "?")
+        rationale = game_state["rationales"].get(cid, "no rationale recorded")
+        prompt = DEBRIEF_PROMPTS.get(cid, "")
+        tier = "?"
+        if cid == "S1":
+            total = sum(game_state["income"].values())
+            base = _baseline(game_state.get("environment","consumer")) * 4
+            pct = total / base if base else 0
+            tier = "thriving" if pct > 0.9 else "surviving" if pct > 0.7 else "struggling" if pct > 0.4 else "collapsing"
+        prompt = prompt.format(team=team, tier=tier)
+        print(f"\n  [{cid}] — option ({decision})")
+        print(f"  Team said: \"{rationale}\"")
+        if prompt:
+            print(f"  Ask: {prompt}")
+
+    # Outcome
+    total = sum(game_state["income"].values())
+    print(f"\nFINAL OUTCOME:")
+    print(f"  Income:      ${total:,}")
+    print(f"  Trust:       {game_state['trust_score']}/100")
+    print(f"  Seeds left:  {seeds}")
+    print(sep)
+
+
+def print_iteration_comparison(game_state_v1, game_state_v2):
+    """
+    Compare two iterations for the same team.
+    Shows what changed, what it cost, and whether the changes worked.
+    """
+    sep = "━" * 60
+    team = game_state_v1["team_name"]
+    print(f"\n{sep}")
+    print(f"ITERATION COMPARISON — {team}")
+    print(sep)
+
+    # Income comparison
+    total_v1 = sum(game_state_v1["income"].values())
+    total_v2 = sum(game_state_v2["income"].values())
+    delta = total_v2 - total_v1
+    direction = "▲" if delta > 0 else "▼" if delta < 0 else "—"
+    print(f"\nINCOME:")
+    print(f"  Iteration 1:  ${total_v1:,}")
+    print(f"  Iteration 2:  ${total_v2:,}")
+    print(f"  Change:       {direction} ${abs(delta):,}")
+
+    # Trust comparison
+    t1 = game_state_v1["trust_score"]
+    t2 = game_state_v2["trust_score"]
+    print(f"\nTRUST:")
+    print(f"  Iteration 1:  {t1}/100")
+    print(f"  Iteration 2:  {t2}/100")
+    print(f"  Change:       {'▲' if t2>t1 else '▼' if t2<t1 else '—'} {abs(t2-t1)} points")
+
+    # Config changes
+    print("\nCONFIG CHANGES:")
+    f1_v1 = game_state_v1.get("frame1",{})
+    f1_v2 = game_state_v2.get("frame1",{})
+    f2_v1 = game_state_v1.get("frame2",{})
+    f2_v2 = game_state_v2.get("frame2",{})
+    f3_v1 = game_state_v1.get("frame3",{})
+    f3_v2 = game_state_v2.get("frame3",{})
+    changed = False
+    for k in list(f1_v1)+list(f2_v1)+list(f3_v1):
+        v1 = {**f1_v1,**f2_v1,**f3_v1}.get(k)
+        v2 = {**f1_v2,**f2_v2,**f3_v2}.get(k)
+        if v1 != v2:
+            print(f"  {k}: {v1} → {v2}")
+            changed = True
+    if not changed:
+        print("  No config changes between iterations.")
+
+    # Cards comparison
+    cards_v1 = set(game_state_v1.get("cards_fired",[]))
+    cards_v2 = set(game_state_v2.get("cards_fired",[]))
+    new_cards = cards_v2 - cards_v1
+    avoided = cards_v1 - cards_v2
+    if avoided: print(f"\nCards avoided in iteration 2: {avoided}")
+    if new_cards: print(f"New cards in iteration 2:     {new_cards}")
+
+    # Reflection vs outcome
+    reflection = game_state_v1.get("strategy_change",{})
+    if reflection:
+        print(f"\nTEAM REFLECTION (before iteration 2):")
+        for k,v in reflection.items(): print(f"  {k}: {v}")
+        print(f"\nDid the changes work?")
+        if delta > 50_000:
+            print(f"  ✅  Income improved by ${delta:,}. Changes had measurable impact.")
+        elif delta > -50_000:
+            print(f"  ⚠  Income roughly flat (${delta:,}). Changes may have been insufficient.")
+        else:
+            print(f"  ❌  Income dropped by ${abs(delta):,}. Changes may have introduced new problems.")
+
     print(sep)
