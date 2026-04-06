@@ -24,16 +24,20 @@ Income triplets throughout: Consumer / Enterprise / Government
 def _should_fire_B1(frame1, game_state):
     return frame1.get("team_structure") == "siloed"
 
+def _should_fire_B2(frame1, game_state):
+    return frame1.get("build_buy_configure") == "configure"
+
 def _should_fire_B3(frame1, game_state):
     return (frame1.get("primary_risk") == "team_capability" or
             frame1.get("build_buy_configure") == "build")
 
+def _should_fire_B4(frame1, game_state):
+    return frame1.get("environment") == "government"
+
 def _should_fire_B5(frame1, game_state):
-    # Always fires — speed pressure hits every team
     return True
 
 def _should_fire_B6(frame1, game_state):
-    # CFO freeze hits everyone
     return True
 
 def _should_fire_B7(frame1, game_state):
@@ -41,52 +45,63 @@ def _should_fire_B7(frame1, game_state):
             frame1.get("build_buy_configure") == "configure")
 
 def _should_fire_L1(frame1, frame2, game_state):
-    # Positive branch: canary or blue_green
     if frame2.get("deployment_method") in ["canary", "blue_green"]:
         return "positive"
-    # Negative branch: big_bang + no rollback
     return (frame2.get("deployment_method") == "big_bang" and
             frame2.get("rollback_plan") == "none")
 
+def _should_fire_L2(frame1, frame2, game_state):
+    return "B1_gap_unresolved" in game_state.get("seeds", [])
+
 def _should_fire_L3(frame2, game_state):
-    # Positive branch: full observability
     if frame2.get("observability_level") == "full":
         return "positive"
-    # Negative branch: none or basic
     return frame2.get("observability_level") in ["none", "basic"]
 
 def _should_fire_L4(frame2, game_state):
     return frame2.get("change_owner") == "single_person"
 
+def _should_fire_L5(frame1, frame2, game_state):
+    return (frame1.get("environment") == "government" and
+            game_state.get("frame3", {}).get("incident_response") == "ad_hoc"
+            if game_state.get("frame3") else
+            frame1.get("environment") == "government")
+
 def _should_fire_L6(frame1, frame2, game_state):
-    # Always fires — every team gets VP Override
     return True
 
 def _should_fire_P1(frame1, frame2, game_state):
-    # Delayed: requires seed from B5(b/c) or L6(b/c) + minimal testing
-    has_seed = (game_state.get("seeds") and
-                any(s in game_state["seeds"] for s in ["B5_speed_skip", "L6_uat_skip"]))
+    has_seed = any(s in game_state.get("seeds", [])
+                   for s in ["B5_speed_skip", "L6_uat_skip"])
     return has_seed and frame2.get("testing_coverage") == "minimal"
 
+def _should_fire_P2(frame1, frame2, game_state):
+    return ("L4_ownership_gap" in game_state.get("seeds", []) or
+            frame1.get("team_structure") == "siloed")
+
 def _should_fire_P3(frame1, frame2, game_state):
-    # Delayed: requires B3(c) seed + build strategy
     has_seed = "B3_debt_accumulated" in game_state.get("seeds", [])
     return has_seed and frame1.get("build_buy_configure") == "build"
 
 def _should_fire_D1(frame1, game_state):
     return frame1.get("data_architecture") == "shared_db"
 
+def _should_fire_V1(frame1, game_state):
+    return ("L2_patch_debt" in game_state.get("seeds", []) and
+            game_state.get("frame3", {}).get("vendor_dependency") in ["medium", "high"])
+
 def _should_fire_V2(frame1, game_state):
-    # In pilot: fires for configure strategy (B2 not in deck — trigger directly)
-    return frame1.get("build_buy_configure") == "configure"
+    return (frame1.get("build_buy_configure") == "configure" or
+            "B2_vendor_risk" in game_state.get("seeds", []))
 
-def _should_fire_S1(game_state):
-    # Always fires — universal scale event
-    return True
+def _should_fire_G3(frame1, game_state):
+    return (frame1.get("environment") == "government" and
+            any(s in game_state.get("seeds", [])
+                for s in ["B4_procurement_risk", "L5_retroactive_deploy"]))
 
-def _should_fire_S2(game_state):
-    # Always fires after S1
-    return True
+def _should_fire_S3(frame1, game_state):
+    return (frame1.get("environment") == "government" and
+            "G3_political_escalation" in game_state.get("seeds", []))
 
 
 # ============================================================
@@ -695,27 +710,300 @@ def card_S2():
 
 
 # ============================================================
+# ADDITIONAL CARDS — B2, B4, L2, L5, P2, V1, G3, S3
+# ============================================================
+
+def card_B2():
+    return {
+        "id": "B2",
+        "name": "The Vendor Promise",
+        "phase": "build",
+        "scenario": (
+            "Your chosen platform vendor just announced their roadmap.\n"
+            "Three features FreshCart is counting on are now marked 'under review'.\n"
+            "The sales rep says not to worry — they're just being cautious with language."
+        ),
+        "options": {
+            "a": "Demand contractual commitment on the features — delays procurement",
+            "b": "Accept the risk and proceed — faster, fragile",
+            "c": "Start evaluating an alternative vendor — expensive distraction",
+        },
+        "flavor": "Lidl trusted SAP's roadmap. Seven years and €500M later they walked away. The features never came.",
+        "income_loss": {
+            "a": (70_000, 52_000, 42_000),
+            "b": (0, 0, 0),
+            "c": (90_000, 67_000, 54_000),
+        },
+        "trust_delta": {"a": 0, "b": 0, "c": 0},
+        "seeds": {"b": "B2_vendor_risk"},
+        "consequence_notes": {
+            "a": "Contract negotiation underway. Procurement delayed.",
+            "b": "Proceeding. Vendor promise noted but not binding.",
+            "c": "Alternative evaluation started. Timeline disrupted.",
+        },
+    }
+
+
+def card_B4():
+    return {
+        "id": "B4",
+        "name": "Procurement Freeze",
+        "phase": "build",
+        "scenario": (
+            "Your cloud infrastructure vendor needs to be reapproved under\n"
+            "new procurement rules. Approval takes 6-10 weeks.\n"
+            "Your go-live date is in 8 weeks."
+        ),
+        "options": {
+            "a": "Wait for full approval — miss the go-live date",
+            "b": "Proceed on existing approval — regulatory risk",
+            "c": "Switch to an already-approved vendor — migration cost and delay",
+        },
+        "flavor": "Government procurement rules exist for good reasons. They also don't care about your deadline.",
+        "income_loss": {
+            "a": (100_000, 75_000, 60_000),
+            "b": (0, 0, 0),
+            "c": (140_000, 105_000, 84_000),
+        },
+        "trust_delta": {"a": 0, "b": -5, "c": 0},
+        "seeds": {"b": "B4_procurement_risk"},
+        "consequence_notes": {
+            "a": "Waiting for approval. Go-live delayed.",
+            "b": "Proceeding on existing approval. Regulatory exposure noted.",
+            "c": "Switching vendors. Migration cost and delay absorbed.",
+        },
+    }
+
+
+def card_L2():
+    return {
+        "id": "L2",
+        "name": "The Assumption Invoice",
+        "phase": "live",
+        "scenario": (
+            "The API contract gap from the handoff is now live in production.\n"
+            "Cart items are being dropped at checkout intermittently -- 3% of orders.\n"
+            "Enough to matter. Not enough to be obvious."
+        ),
+        "options": {
+            "a": "Emergency fix -- take the integration offline, rebuild the contract",
+            "b": "Compensating transaction -- patch around it, add more debt",
+            "c": "Monitor and measure -- don't touch until you understand the full scope",
+        },
+        "flavor": "Silent failures are the most expensive kind. By the time you see them clearly, they've already cost you.",
+        "income_loss": {
+            "a": (120_000, 90_000, 72_000),
+            "b": (60_000, 45_000, 36_000),
+            "c": (30_000, 22_000, 18_000),
+        },
+        "trust_delta": {"a": -5, "b": -10, "c": -15},
+        "seeds": {
+            "b": "L2_patch_debt",
+            "c": "L2_patch_debt",
+        },
+        "consequence_notes": {
+            "a": "Integration rebuilt cleanly. Expensive but resolved.",
+            "b": "Patch applied. Debt compounding.",
+            "c": "Monitoring in progress. Risk still live.",
+        },
+    }
+
+
+def card_L5():
+    return {
+        "id": "L5",
+        "name": "The Approval Chain",
+        "phase": "live",
+        "scenario": (
+            "A critical data exposure bug is found in production. Your team\n"
+            "knows the fix. Deploying it requires sign-off from three department\n"
+            "heads. One is traveling. One is in a budget meeting.\n"
+            "One wants a full impact assessment first."
+        ),
+        "options": {
+            "a": "Wait for proper approval -- correct process, painful delay",
+            "b": "Deploy fix, get approval retroactively -- fast, career risk",
+            "c": "Partial mitigation only -- reduce exposure without full fix",
+        },
+        "flavor": "Government incident response without practiced runbooks defaults to committee. Committees don't move at the speed of incidents.",
+        "income_loss": {
+            "a": (200_000, 150_000, 120_000),
+            "b": (50_000, 37_000, 30_000),
+            "c": (100_000, 75_000, 60_000),
+        },
+        "trust_delta": {"a": -15, "b": -5, "c": -10},
+        "seeds": {"b": "L5_retroactive_deploy"},
+        "consequence_notes": {
+            "a": "Waiting for approval. Exposure window open.",
+            "b": "Fix deployed. Approval requested retroactively.",
+            "c": "Partial mitigation applied. Full fix still pending.",
+        },
+    }
+
+
+def card_P2():
+    return {
+        "id": "P2",
+        "name": "Who Owns the Tracking Service?",
+        "phase": "v2",
+        "scenario": (
+            "The new Tracking Service sits between three existing teams.\n"
+            "Nobody owns it. Each team assumed another was responsible.\n"
+            "It has been live for six days. Tonight it fails silently.\n"
+            "4,000 customers get no delivery updates. Support has no information."
+        ),
+        "options": {
+            "a": "Emergency ownership assignment -- designate a team now",
+            "b": "Shared ownership agreement -- committee approach",
+            "c": "Outsource ownership to vendor -- fast, expensive, creates dependency",
+        },
+        "flavor": "Ownership gaps are architectural decisions that feel like org decisions. You made this one in Frame 1 and Frame 2.",
+        "income_loss": {
+            "a": (80_000, 60_000, 48_000),
+            "b": (120_000, 90_000, 72_000),
+            "c": (200_000, 150_000, 120_000),
+        },
+        "trust_delta": {"a": -10, "b": -20, "c": -10},
+        "seeds": {"b": "P2_shared_ownership"},
+        "consequence_notes": {
+            "a": "Ownership assigned. Team scrambling to get up to speed.",
+            "b": "Committee formed. Coordination overhead begins.",
+            "c": "Vendor engaged. Dependency created.",
+        },
+    }
+
+
+def card_V1():
+    return {
+        "id": "V1",
+        "name": "API Surprise",
+        "phase": "v2",
+        "scenario": (
+            "Your notification vendor updated their API last night.\n"
+            "No advance notice. The v2 Tracking Service depends on this\n"
+            "API for delivery status pushes. It is now broken in production.\n"
+            "12,000 customers are not receiving delivery notifications."
+        ),
+        "options": {
+            "a": "Emergency API update -- drop everything, fix now",
+            "b": "Fallback to email only -- degrades experience, buys time",
+            "c": "Queue notifications and batch send when fixed",
+        },
+        "flavor": "Vendor APIs change. Always. The question is whether you built for it.",
+        "income_loss": {
+            "a": (90_000, 67_000, 54_000),
+            "b": (40_000, 30_000, 24_000),
+            "c": (30_000, 22_000, 18_000),
+        },
+        "trust_delta": {"a": -5, "b": -15, "c": -5},
+        "seeds": {"c": "V1_queue_risk"},
+        "consequence_notes": {
+            "a": "Emergency fix underway. All hands on deck.",
+            "b": "Fallback active. Customers getting emails only.",
+            "c": "Queue building. Risk of overflow if scale event hits.",
+        },
+    }
+
+
+def card_G3():
+    return {
+        "id": "G3",
+        "name": "The Audit",
+        "phase": "v2",
+        "scenario": (
+            "An internal audit has flagged two procurement and deployment\n"
+            "decisions from earlier in the project as non-compliant.\n"
+            "The finding is now with the department secretary.\n"
+            "Project may be paused pending review.\n"
+            "Technical risk is low. Process risk is high."
+        ),
+        "options": {
+            "a": "Full cooperation -- transparent audit response, possible project pause",
+            "b": "Legal/compliance remediation only -- address the letter, not the spirit",
+            "c": "Escalate politically -- use relationships to contain the finding",
+        },
+        "flavor": "Canada Phoenix wasn't just a technical failure. It was a governance failure. The two are inseparable in government implementations.",
+        "income_loss": {
+            "a": (180_000, 135_000, 108_000),
+            "b": (120_000, 90_000, 72_000),
+            "c": (80_000, 60_000, 48_000),
+        },
+        "trust_delta": {"a": -5, "b": -15, "c": -10},
+        "trust_recovery_modifier": {"a": 20},
+        "seeds": {"c": "G3_political_escalation"},
+        "consequence_notes": {
+            "a": "Full cooperation underway. Project may pause. Trust building long term.",
+            "b": "Compliance addressed on paper. Underlying risk remains.",
+            "c": "Escalation in progress. Political capital being spent.",
+        },
+    }
+
+
+def card_S3():
+    return {
+        "id": "S3",
+        "name": "The Political Exposure",
+        "phase": "scale",
+        "scenario": (
+            "The minister responsible for the FreshCart government contract\n"
+            "has been asked a question in parliament about procurement irregularities.\n"
+            "Your team has 4 hours to prepare a briefing.\n"
+            "The technical facts are defensible. The process facts are not."
+        ),
+        "options": {
+            "a": "Full briefing -- technical and process facts, transparent",
+            "b": "Technical briefing only -- answer what was asked, nothing more",
+            "c": "No comment pending internal review -- buys time, looks evasive",
+        },
+        "flavor": "Canada Phoenix became a political crisis before it became a technical one. Government implementations don't fail in server rooms -- they fail in question time.",
+        "income_loss": {
+            "a": (120_000, 90_000, 72_000),
+            "b": (80_000, 60_000, 48_000),
+            "c": (200_000, 150_000, 120_000),
+        },
+        "trust_delta": {"a": -10, "b": -20, "c": -35},
+        "trust_recovery_modifier": {"a": 25},
+        "consequence_notes": {
+            "a": "Full briefing delivered. Trust rebuilding begins.",
+            "b": "Technical facts only. Follow-up questions likely.",
+            "c": "No comment issued. Political pressure building.",
+        },
+    }
+
+# ============================================================
 # CARD REGISTRY
 # ============================================================
 
 CARD_REGISTRY = {
+    # Build
     "B1": card_B1,
+    "B2": card_B2,
     "B3": card_B3,
+    "B4": card_B4,
     "B5": card_B5,
     "B6": card_B6,
     "B7": card_B7,
+    # Live
     "L1": card_L1_negative,
-    "L1_positive": lambda: card_L1_positive("canary"),  # default — overridden in select
+    "L1_positive": lambda: card_L1_positive("canary"),
+    "L2": card_L2,
     "L3": card_L3_negative,
     "L3_positive": card_L3_positive,
     "L4": card_L4,
+    "L5": card_L5,
     "L6": card_L6,
+    # v2
     "P1": card_P1,
+    "P2": card_P2,
     "P3": card_P3,
     "D1": card_D1,
+    "V1": card_V1,
     "V2": card_V2,
+    "G3": card_G3,
+    # Scale
     "S1": card_S1,
     "S2": card_S2,
+    "S3": card_S3,
 }
 
 
@@ -733,59 +1021,56 @@ def get_card(card_id, game_state=None):
 # ============================================================
 
 def select_build_cards(frame1, game_state):
-    """Return list of card IDs to fire in Phase 1 (Build)."""
+    """Return list of card IDs to fire in Phase 1 (Build). Max 3."""
     cards = []
-    if _should_fire_B1(frame1, game_state):
-        cards.append("B1")
-    if _should_fire_B3(frame1, game_state):
-        cards.append("B3")
-    if _should_fire_B5(frame1, game_state):
-        cards.append("B5")
-    if _should_fire_B6(frame1, game_state):
-        cards.append("B6")
-    if _should_fire_B7(frame1, game_state):
-        cards.append("B7")
-    # Cap at 3 cards per phase to avoid overload
+    if _should_fire_B1(frame1, game_state):  cards.append("B1")
+    if _should_fire_B2(frame1, game_state):  cards.append("B2")
+    if _should_fire_B3(frame1, game_state):  cards.append("B3")
+    if _should_fire_B4(frame1, game_state):  cards.append("B4")
+    if _should_fire_B5(frame1, game_state):  cards.append("B5")
+    if _should_fire_B6(frame1, game_state):  cards.append("B6")
+    if _should_fire_B7(frame1, game_state):  cards.append("B7")
     return cards[:3]
 
 
 def select_live_cards(frame1, frame2, game_state):
-    """Return list of card IDs to fire in Phase 2 (Live)."""
+    """Return list of card IDs to fire in Phase 2 (Live). Max 3."""
     cards = []
     deploy = frame2.get("deployment_method", "big_bang")
     l1_result = _should_fire_L1(frame1, frame2, game_state)
     if l1_result == "positive":
-        # Store deployment method so card message is accurate
         game_state["_l1_deploy"] = deploy
         cards.append("L1_positive")
     elif l1_result:
         cards.append("L1")
+    if _should_fire_L2(frame1, frame2, game_state):  cards.append("L2")
     l3_result = _should_fire_L3(frame2, game_state)
     if l3_result == "positive":
         cards.append("L3_positive")
     elif l3_result:
         cards.append("L3")
-    if _should_fire_L4(frame2, game_state):
-        cards.append("L4")
-    if _should_fire_L6(frame1, frame2, game_state):
-        cards.append("L6")
+    if _should_fire_L4(frame2, game_state):  cards.append("L4")
+    if _should_fire_L5(frame1, frame2, game_state):  cards.append("L5")
+    if _should_fire_L6(frame1, frame2, game_state):  cards.append("L6")
     return cards[:3]
 
 
 def select_v2_cards(frame1, frame2, game_state):
-    """Return list of card IDs to fire in Phase 3 (v2)."""
+    """Return list of card IDs to fire in Phase 3 (v2). Max 3."""
     cards = []
-    if _should_fire_P1(frame1, frame2, game_state):
-        cards.append("P1")
-    if _should_fire_P3(frame1, frame2, game_state):
-        cards.append("P3")
-    if _should_fire_D1(frame1, game_state):
-        cards.append("D1")
-    if _should_fire_V2(frame1, game_state):
-        cards.append("V2")
+    if _should_fire_P1(frame1, frame2, game_state):  cards.append("P1")
+    if _should_fire_P2(frame1, frame2, game_state):  cards.append("P2")
+    if _should_fire_P3(frame1, frame2, game_state):  cards.append("P3")
+    if _should_fire_D1(frame1, game_state):           cards.append("D1")
+    if _should_fire_V1(frame1, game_state):           cards.append("V1")
+    if _should_fire_V2(frame1, game_state):           cards.append("V2")
+    if _should_fire_G3(frame1, game_state):           cards.append("G3")
     return cards[:3]
 
 
 def select_scale_cards(game_state):
-    """Phase 4 always fires S1 then S2."""
-    return ["S1", "S2"]
+    """Phase 4 cards — S1 and S2 always fire. S3 fires for government with seed."""
+    cards = ["S1", "S2"]
+    if _should_fire_S3(game_state.get("frame1", {}), game_state):
+        cards.append("S3")
+    return cards
